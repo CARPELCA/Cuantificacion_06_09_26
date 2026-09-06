@@ -1,0 +1,163 @@
+# =========================================================
+# VISUALIZACIÓN POR ESPECIE Y TRATAMIENTO
+# Boxplot + jitter (sin media)
+# Facetas: Orbicella annularis (izq) y Porites astreoides (der)
+# Líneas de referencia solo para A260/A280
+# =========================================================
+
+# Instalar paquetes si no los tienes
+# install.packages(c("tidyverse", "readxl"))
+
+# Cargar librerías
+library(tidyverse)
+library(readxl)
+
+# =========================================================
+# 1. CONFIGURACIÓN INICIAL
+# =========================================================
+
+# --- Ruta del archivo de datos ---
+archivo <- "C:/Users/charl/OneDrive/Documentos/Maestria/Semestre 4/Graficas_R/Graficas cauntificacion/Cuantificacion_datos_corregidos.xlsx"
+
+# --- Ruta de salida para las imágenes ---
+ruta_salida <- "C:/Users/charl/OneDrive/Documentos/Maestria/Semestre 4/Graficas_R/"
+
+# --- Colores personalizados (por tratamiento) ---
+colores_tratamientos <- c("Moco" = "#12538D",
+                          "Filtro" = "#BFB08E",
+                          "RNAlater" = "#F5866C")
+
+# --- Orden de los tratamientos en el eje X ---
+orden_tratamientos <- c("Moco", "Filtro", "RNAlater")
+
+# --- Orden de las especies en las facetas (izquierda -> derecha) ---
+orden_especies <- c("Orbicella annularis", "Porites astreoides")
+
+# --- Variables a graficar (solo estas 3) ---
+variables <- c("ug_mL", "A260_A280", "A260_A230")
+
+# --- Nombres para los títulos (reemplazar _ por /) ---
+nombres_titulos <- c("Concentración de ADN (µg/mL)", "Relación A260/A280", "Relación A260/A230")
+names(nombres_titulos) <- variables
+
+# --- Tamaño de fuente base ---
+tamaño_fuente <- 14
+
+# =========================================================
+# 2. IMPORTAR DATOS
+# =========================================================
+
+datos <- read_excel(archivo, sheet = 1)
+
+# =========================================================
+# 3. PREPARAR FACTORES (orden y etiquetas)
+# =========================================================
+
+datos <- datos %>%
+  mutate(
+    TRATAMIENTO = factor(TRATAMIENTO, levels = orden_tratamientos),
+    ESPECIE = factor(ESPECIE, levels = orden_especies)
+  )
+
+# =========================================================
+# 4. FUNCIÓN PARA GENERAR UNA GRÁFICA (por variable)
+# =========================================================
+
+hacer_grafica <- function(variable) {
+  
+  # Título con formato deseado
+  titulo <- nombres_titulos[variable]
+  
+  # Crear la gráfica base
+  p <- ggplot(datos, aes(x = TRATAMIENTO, y = .data[[variable]], fill = TRATAMIENTO)) +
+    
+    # Boxplot con outliers visibles
+    geom_boxplot(alpha = 0.7, width = 0.6, outlier.size = 1.5, outlier.shape = 16) +
+    
+    # Nube de puntos (jitter) en gris
+    geom_jitter(width = 0.15, size = 2, alpha = 0.6, color = "gray20") +
+    
+    # Escala de colores personalizada
+    scale_fill_manual(values = colores_tratamientos) +
+    
+    # Facetas por especie (dos paneles)
+    facet_wrap(~ ESPECIE, ncol = 2, scales = "free_x") +
+    
+    # Etiquetas
+    labs(title = titulo,
+         x = "Tratamiento",
+         y = titulo,
+         fill = "Tratamiento") +
+    
+    # Tema: fondo blanco con grid suave y borde de panel
+    theme_bw(base_size = tamaño_fuente) +
+    theme(
+      plot.title = element_text(face = "bold", hjust = 0.5, size = 16),
+      strip.text = element_text(face = "italic", size = 13),  # nombres en cursiva
+      strip.background = element_rect(fill = "gray90", color = NA),  # fondo gris claro
+      panel.grid.minor = element_blank(),
+      panel.grid.major = element_line(color = "gray85", size = 0.4),
+      panel.border = element_rect(color = "black", fill = NA, size = 0.8),
+      legend.position = "bottom",
+      legend.title = element_text(size = 12),
+      legend.text = element_text(size = 11)
+    )
+  
+  # --- Líneas de referencia SOLO para A260_A280 ---
+  if (variable == "A260_A280") {
+    p <- p +
+      geom_hline(yintercept = 1.6, linetype = "dashed", color = "gray50", size = 0.6) +
+      geom_hline(yintercept = 2.0, linetype = "dashed", color = "gray50", size = 0.6) +
+      geom_hline(yintercept = 1.8, linetype = "solid", color = "gray30", size = 0.7)
+  }
+  
+  return(p)
+}
+
+# =========================================================
+# 5. GENERAR GRÁFICAS PARA CADA VARIABLE
+# =========================================================
+
+lista_graficas <- map(variables, hacer_grafica)
+names(lista_graficas) <- variables
+
+# Mostrar cada gráfica en el visor (opcional)
+# walk(lista_graficas, print)
+walk(lista_graficas, print)
+# =========================================================
+# 6. GUARDAR CADA GRÁFICA EN LA CARPETA ESPECIFICADA
+# =========================================================
+
+# Crear la carpeta si no existe
+if (!dir.exists(ruta_salida)) {
+  dir.create(ruta_salida, recursive = TRUE)
+}
+
+for (i in seq_along(lista_graficas)) {
+  nombre_var <- names(lista_graficas)[i]
+  ruta_completa <- file.path(ruta_salida, paste0(nombre_var, ".png"))
+  ggsave(
+    filename = ruta_completa,
+    plot = lista_graficas[[i]],
+    width = 9,
+    height = 6,
+    dpi = 300
+  )
+}
+
+# =========================================================
+# 7. RESUMEN ESTADÍSTICO
+# =========================================================
+
+resumen <- datos %>%
+  group_by(ESPECIE, TRATAMIENTO) %>%
+  summarise(across(all_of(variables),
+                   list(media = mean, sd = sd, min = min, max = max),
+                   na.rm = TRUE))
+
+print(resumen)
+
+# =========================================================
+# FIN
+# =========================================================
+
